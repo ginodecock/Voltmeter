@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<script type="text/javascript" src="smoothie/smoothie.js"></script>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, user-scalable=no,
+    shrink-to-fit=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0" />
+<title>Voltmeter101</title>
+<script>
+// Redirect console.log when running from Evothings Workbench.
+if (window.hyper && window.hyper.log) { console.log = hyper.log }
+</script>
+</head>
+<body bgcolor= "#707070">
+<h1><table id="stat"><td>Voltmeter</td> <td id="connectionstatus"> </td></table></h1>
+<h2>ADS1115 inputs</h2>
+    <h2><b>
+    <table id="ads115">
+        <tr><td id="adsg0">Gain: 0</td><td width="300" bgcolor="green" id="adsv0">CH1: 0</td><td width="300" bgcolor="blue" id="adsv1">CH2: 0</td></tr>
+        <tr><td colspan="3"><canvas id="canvasADSCH0" width="900" height="300"></canvas></td></tr>
+    </table></b></h2>
+<h3>Analog inputs</h3>
+    <table id="analogio">
+        <tr><td>A0:</td><td width="70" id="a0">0</td><td>  A2:</td><td id="a2">0</td></tr>
+        <tr><td>A1:</td><td width="70" id="a1">0</td><td>  A3:</td><td id="a3">0</td></tr>
+    </table>
+<script src="cordova.js"></script>
+<script>
+// UUID of Luxometer service.
+var LUXOMETER_SERVICE = '19b10000-e8f2-537e-4f6c-d104768a1214'
+
+// UUID of Luxometer config characteristic (write 1 to turn sensor ON,
+// 0 to turn sensor OFF).
+var LUXOMETER_CONFIG = '19b10001-e8f2-537e-4f6c-d104768a1214'
+var ANALOG = '19b10002-e8f2-537e-4f6c-d104768a1214'
+var ADSCH1 = '19b10003-e8f2-537e-4f6c-d104768a1214'
+var ADSCH2 = '19b10004-e8f2-537e-4f6c-d104768a1214'
+var lineCH0 = new TimeSeries();
+var lineCH1 = new TimeSeries();
+var VCH1 = 0;
+var VCH2 = 0;
+
+var smoothieCH0;
+
+function findDevice()
+{
+    console.log('Start scanning')
+
+    // Start scanning. Two callback functions are specified.
+    evothings.ble.startScan(
+        onDeviceFound,
+        onScanError)
+
+    // This function is called when a device is detected, here
+    // we check if we found the device we are looking for.
+    function onDeviceFound(device)
+    {
+        console.log('Found device: ' + device.advertisementData.kCBAdvDataLocalName)
+
+        if (device.advertisementData.kCBAdvDataLocalName == 'LED')
+        {
+            console.log('Found the 101!')
+		
+            // Stop scanning.
+            evothings.ble.stopScan()
+
+            // Connect.
+            connectToDevice(device)
+        }
+    }
+
+    // Function called when a scan error occurs.
+    function onScanError(error)
+    {
+        console.log('Scan error: ' + error)
+    }
+};
+
+function connectToDevice(device)
+{
+    evothings.ble.connectToDevice(
+        device,
+        onConnected,
+        onDisconnected,
+        onConnectError)
+
+    function onConnected(device)
+    {
+        console.log('Connected to device')
+        document.getElementById('connectionstatus').innerHTML = "Connected";
+        // Enable notifications for Luxometer.
+	enableLuxometerNotifications(device)
+	//var interval = setInterval(read101,1000,device)
+    var interval0 = setInterval(showAnalog,100,device)
+    var interval1 = setInterval(showADSCH1,100,device)
+    var interval2 = setInterval(showADSCH2,100,device)
+    setUpSmoothiech0(device);
+    }
+
+    // Function called if the device disconnects.
+    function onDisconnected(error)
+    {
+        console.log('Device disconnected')
+    }
+
+    // Function called when a connect error occurs.
+    function onConnectError(error)
+    {
+        console.log('Connect error: ' + error)
+    }
+};
+
+function enableLuxometerNotifications(device)
+{
+    // Get Luxometer service and characteristics.
+    var service = evothings.ble.getService(device, LUXOMETER_SERVICE)
+    var configCharacteristic = evothings.ble.getCharacteristic(service, LUXOMETER_CONFIG)
+    console.log('service: ' + service)
+    console.log('configCharacteristic: ' + configCharacteristic)
+
+
+    // Turn Luxometer ON.
+   /* evothings.ble.writeCharacteristic(
+        device,
+        configCharacteristic,
+        new Uint8Array([88]),
+        onLuxometerActivated,
+        onLuxometerActivatedError)
+*/
+    evothings.ble.readCharacteristic(
+        device,
+        configCharacteristic,
+            function(data)
+    {
+        console.log('characteristic data: ' + evothings.ble.fromUtf8(data));
+    },
+    function(errorCode)
+    {
+        console.log('readCharacteristic error: ' + errorCode);
+    })
+
+    function onLuxometerActivated()
+    {
+        console.log('Luxometer is ON')
+        // Enable notifications from the Luxometer.
+        evothings.ble.enableNotification(
+            device,
+            configCharacteristic,
+            onLuxometerNotification,
+            onLuxometerNotificationError)
+    }
+
+    function onLuxometerActivatedError(error)
+    {
+        console.log('Luxometer activate error: ' + error)
+    }
+
+    // Called repeatedly until disableNotification is called.
+    function onLuxometerNotification(data)
+    {
+        console.log('value: ' + data[0])
+    }
+
+    function onLuxometerNotificationError(error)
+    {
+        console.log('Luxometer notification error: ' + error)
+    }
+
+};
+function read101(device)
+{
+console.log('c');
+    // Get Luxometer service and characteristics.
+    var service = evothings.ble.getService(device, LUXOMETER_SERVICE);
+    var configCharacteristic = evothings.ble.getCharacteristic(service, LUXOMETER_CONFIG);
+    console.log('configCharacteristic: ' + configCharacteristic);
+    evothings.ble.readCharacteristic(
+        device,
+        configCharacteristic,
+            function(data)
+    {
+        console.log('characteristic data: ' + evothings.ble.fromUtf8(data));
+    },
+    function(errorCode)
+    {
+        console.log('readCharacteristic error: ' + errorCode);
+    });
+};
+toVolts = function(value)
+{
+	// Genuino 101 limits analog in to 3.3 volts.
+	//if (value==1023) return 'max';
+	return (Math.round((3.3*value/1024)*100)/100).toString(10);
+};    
+function showAnalog(device)
+{
+   // console.log('a');
+    var service = evothings.ble.getService(device, LUXOMETER_SERVICE);
+    var analogCharacteristic = evothings.ble.getCharacteristic(service, ANALOG);
+    evothings.ble.readCharacteristic(
+        device,
+        analogCharacteristic,
+    function(data)
+    {
+        //var raw = new DataView(data).getUint16(0, true)
+        //console.log('Raw Luxometer value: ' + raw)
+        var s0, s1, s2, s3, s4, s5;
+        s0 = toVolts(new DataView(data).getUint16(0, true)) + ' V';
+        s1 = toVolts(new DataView(data).getUint16(2, true)) + ' V';
+	    s2 = toVolts(new DataView(data).getUint16(4, true)) + ' V';
+	    s3 = toVolts(new DataView(data).getUint16(6, true)) + ' V';
+	    document.getElementById('a0').innerHTML = s0;
+	    document.getElementById('a1').innerHTML = s1;
+	    document.getElementById('a2').innerHTML = s2;
+	    document.getElementById('a3').innerHTML = s3;
+    },
+    function(errorCode)
+    {
+        console.log('readCharacteristic error: ' + errorCode);
+    });
+	
+	
+};
+    
+function showADSCH1(device)
+{
+   // console.log('ch1');
+    var service = evothings.ble.getService(device, LUXOMETER_SERVICE);
+    var analogCharacteristic = evothings.ble.getCharacteristic(service, ADSCH1);
+    evothings.ble.readCharacteristic(
+        device,
+        analogCharacteristic,
+    function(data)
+    {
+        //var raw = new DataView(data).getFloat32(0, true)
+        //console.log('ADSCH0 ' + raw)
+        var gain, reading
+        gain = new DataView(data).getFloat32(0, true);
+        reading = new DataView(data).getFloat32(4, true);
+	    document.getElementById('adsg0').innerHTML = 'Gain: ' + gain;
+	    document.getElementById('adsv0').innerHTML = 'CH1: ' + (reading).toFixed(6) + ' V';
+        VCH1 = reading;
+    },
+    function(errorCode)
+    {
+        console.log('readCharacteristic error: ' + errorCode);
+    });
+	
+	
+};
+    
+function setUpSmoothiech0(device)
+{
+	smoothieCH0 = new SmoothieChart(
+	{
+		maxValue:6.00,minValue:-6.00,
+		grid: { strokeStyle:'rgb(125,0,0)', fillStyle:'rgb(60,0,0)',
+			lineWidth: 1, millisPerLine: 250, verticalSections: 12, },
+		labels: { fillStyle:'rgb(60,0,0)' }
+	});
+
+	smoothieCH0.streamTo(document.getElementById("canvasADSCH0"),1000);
+
+	setInterval( function()
+	{
+		lineCH0.append( new Date().getTime(), VCH1);
+        lineCH1.append( new Date().getTime(), VCH2);
+    }, 10);
+
+	smoothieCH0.addTimeSeries(lineCH0, { strokeStyle:'rgb(0,255,0)', lineWidth:1 });
+    smoothieCH0.addTimeSeries(lineCH1, { strokeStyle:'rgb(0,0,255)', lineWidth:1 });
+};
+    
+function showADSCH2(device)
+{
+    //console.log('ch2');
+    var service = evothings.ble.getService(device, LUXOMETER_SERVICE);
+    var analogCharacteristic = evothings.ble.getCharacteristic(service, ADSCH2);
+    evothings.ble.readCharacteristic(
+        device,
+        analogCharacteristic,
+    function(data)
+    {
+        //var raw = new DataView(data).getFloat32(0, true)
+        //console.log('ADSCH1 ' + raw)
+        var gain, reading
+        gain = new DataView(data).getFloat32(0, true);
+        reading = new DataView(data).getFloat32(4, true);
+	    //document.getElementById('adsg1').innerHTML = 'Gain: ' + gain;
+	    document.getElementById('adsv1').innerHTML = 'CH2: ' + (reading).toFixed(6) + ' V';
+        VCH2 = reading;
+    },
+    function(errorCode)
+    {
+        console.log('readCharacteristic error: ' + errorCode);
+    });
+	
+	
+};
+// Start scanning for devices when the plugin has loaded.
+document.addEventListener('deviceready', findDevice, false)
+</script>
+
+</body>
+</html>
+

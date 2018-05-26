@@ -1,0 +1,32 @@
+{
+  "uuid": "9c715d28-aaa7-46fa-8595-e5641826ca46",
+  "name": "voltmeter101",
+  "plugins": [
+    {
+      "name": "cordova-plugin-ble",
+      "version": "2.0.0"
+    }
+  ],
+  "libraries": [
+    {
+      "name": "jquery",
+      "version": "2.1.1"
+    },
+    {
+      "name": "mdl",
+      "version": "1.2.1"
+    },
+    {
+      "name": "smoothie",
+      "version": "1.28"
+    }
+  ],
+  "title": "VM101",
+  "description": "ads1115 voltmeter",
+  "long-description": "Voltmeter based on arduino 101 board",
+  "version": "1.0.0",
+  "author-name": "G-DC",
+  "author-email": "ginodecock@skynet.be",
+  "author-url": "http://www.g-dc.be",
+  "cordova-id": "com.evothings.samples.Voltmeter"
+}
